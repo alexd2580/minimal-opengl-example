@@ -2,8 +2,8 @@
 #define INCLUDE_PROGRAM_H
 
 #include <SDL2/SDL_opengl.h>
-#include <time.h>
 #include <stdbool.h>
+#include <time.h>
 
 struct Program_;
 typedef struct Program_* Program;

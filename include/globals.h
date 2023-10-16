@@ -9,7 +9,7 @@
 
 #define ALLOCATE(n, t) ((t*)malloc((size_t)(n) * sizeof(t)))
 
-#define FORI(lo, hi) for(int i=(lo); i<(hi); i++)
+#define FORI(lo, hi) for(int i = (lo); i < (hi); i++)
 
 __attribute__((const)) float mix(float a, float b, float x);
 
