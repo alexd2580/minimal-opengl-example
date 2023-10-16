@@ -1,16 +1,13 @@
-#include <GL/gl.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #define GL_GLEXT_PROTOTYPES
 
-#include <GL/glu.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_opengl.h>
-#include <SDL2/SDL_opengl_glext.h>
+#include <GL/glu.h>
 
 #include "program.h"
 
