@@ -1,3 +1,4 @@
+#include <GL/gl.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -26,12 +27,25 @@ struct Size {
     int h;
 };
 
-bool handle_events() {
+bool handle_events(struct Size* size) {
     SDL_Event event;
     while(SDL_PollEvent(&event)) {
         switch(event.type) {
         case SDL_QUIT:
             return true;
+        case SDL_KEYDOWN: {
+            SDL_Keycode key = event.key.keysym.sym;
+            if(key == SDLK_ESCAPE || key == SDLK_q) {
+                return true;
+            }
+            break;
+        }
+        case SDL_WINDOWEVENT:
+            if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                size->w = event.window.data1;
+                size->h = event.window.data2;
+                glViewport(0, 0, size->w, size->h);
+            }
         default:
             break;
         }
@@ -86,36 +100,42 @@ int main(int argc, char* argv[]) {
     glBindVertexArray(vao);
 
     Program shader_a = create_program("shaders/quad.vert", "shaders/data.frag");
-    check_error("Compile program");
-    /* Program shader_b = create_program("assets/shaders/basic_present.comp"); */
+    check_error("Compile program 'data'");
+    Program shader_b = create_program("shaders/quad.vert", "shaders/color.frag");
+    check_error("Compile program 'color'");
 
     while(true) {
         update_program_if_modified(shader_a);
-        check_error("Update program");
-        /* reinstall_program_if_modified(shader_b); */
+        check_error("Update program 'data'");
+        update_program_if_modified(shader_b);
+        check_error("Update program 'color'");
 
-        /*     swap_and_bind_textures(textures); */
         glClear(GL_COLOR_BUFFER_BIT);
         check_error("Clear color");
 
         use_program(shader_a);
-        check_error("Use program");
-
+        check_error("Use program 'data'");
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        check_error("Draw arrays");
-
+        check_error("Draw arrays 'data'");
         glUseProgram(0);
-        check_error("Unuse program");
+
+        use_program(shader_b);
+        check_error("Use program 'color'");
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        check_error("Draw arrays 'color'");
+        glUseProgram(0);
 
         SDL_GL_SwapWindow(window);
-
-        if(handle_events()) {
+        if(handle_events(&size)) {
             break;
         }
     }
 
     delete_program(shader_a);
-    /* delete_program(shader_b); */
+    delete_program(shader_b);
+
+    glDeleteVertexArrays(1, &vao);
+
     /* delete_textures(textures); */
 
     // Close window.

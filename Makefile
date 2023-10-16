@@ -30,42 +30,39 @@ SRCFILES := $(wildcard src/*.c)
 OBJFILES := $(patsubst %.c,%.o,$(SRCFILES))
 DEPFILES := $(patsubst %.c,%.d,$(SRCFILES))
 
-OBJFILES_DEBUG = $(patsubst %.o,debug/%.o,$(OBJFILES))
-OBJFILES_RELEASE = $(patsubst %.o,release/%.o,$(OBJFILES))
+OBJFILES_DEBUG = $(patsubst %.o,build/debug/%.o,$(OBJFILES))
+OBJFILES_RELEASE = $(patsubst %.o,build/release/%.o,$(OBJFILES))
 
-DEPFILES_DEBUG = $(patsubst %.d,debug/%.d,$(DEPFILES))
-DEPFILES_RELEASE = $(patsubst %.d,release/%.d,$(DEPFILES))
+DEPFILES_DEBUG = $(patsubst %.d,build/debug/%.d,$(DEPFILES))
+DEPFILES_RELEASE = $(patsubst %.d,build/release/%.d,$(DEPFILES))
 
-.DEFAULT: ogl_debug
+.DEFAULT: debug
 
-.PHONY: all ogl_debug ogl_relase run clean
+.PHONY: run_debug run_release debug release run clean
 
-# Shorthands
-all: ogl_debug ogl_release Makefile
-	@echo "  [ finished ]"
+run_debug: debug
+	build/debug/debug
 
-# Executable linking
-ogl_debug: $(OBJFILES_DEBUG) $(SRCFILES) Makefile
+run_release: release
+	build/debug/debug
+
+debug: $(OBJFILES_DEBUG) $(SRCFILES) Makefile
 	@echo "  [ Linking $@ ]" && \
-	gcc $(OBJFILES_DEBUG) -o $@ $(LIBRARY_FLAGS)
+	gcc $(OBJFILES_DEBUG) -o build/$@/$@ $(LIBRARY_FLAGS)
 
-ogl_release: $(OBJFILES_RELEASE) $(SRCFILES) Makefile
+release: $(OBJFILES_RELEASE) $(SRCFILES) Makefile
 	@echo "  [ Linking $@ ]" && \
-	gcc $(OBJFILES_RELEASE) -o $@ $(LIBRARY_FLAGS)
+	gcc $(OBJFILES_RELEASE) -o build/$@/$@ $(LIBRARY_FLAGS)
 
-# Source file compilation
-debug/%.o: %.c Makefile
+build/debug/%.o: %.c Makefile
 	@echo "  [ Compiling $< ]" && \
-	mkdir debug/$(dir $<) -p && \
+	mkdir build/debug/$(dir $<) -p && \
 	gcc $(CFLAGS) $(INCLUDE_FLAGS) $(WFLAGS) $(CWFLAGS) $(DEBUGFLAGS) -MMD -MP -c $< -o $@
 
-release/%.o: %.c Makefile
+build/release/%.o: %.c Makefile
 	@echo "  [ Compiling $< ]" && \
-	mkdir release/$(dir $<) -p && \
+	mkdir build/release/$(dir $<) -p && \
 	gcc $(CFLAGS) $(INCLUDE_FLAGS) $(WFLAGS) $(CWFLAGS) $(RELEASEFLAGS) -MMD -MP -c $< -o $@
 
 clean:
-	-@rm -f $(wildcard $(OBJFILES_DEBUG) $(OBJFILES_RELEASE) $(DEPFILES_DEBUG) $(DEPFILES_RELEASE) ogl_debug ogl_release) && \
-	rm -rfv ogl_debug ogl_release && \
-	rm -rfv `find ./ -name "*~"` && \
-	echo "  [ clean main done ]"
+	-@rm -rfv build
