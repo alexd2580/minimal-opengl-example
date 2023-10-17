@@ -78,7 +78,9 @@ GLuint create_framebuffer(GLuint color_texture, GLuint depth_texture) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depth_texture, 0);
+    const GLenum buffers[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    glDrawBuffers(2, buffers);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return framebuffer;
@@ -98,20 +100,12 @@ int main(int argc, char* argv[]) {
     SDL_GLContext context = SDL_GL_CreateContext(window);
 
     glViewport(0, 0, size.w, size.h);
-
-    glClearColor(0.2f, 0, 0.2f, 0);
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_ALWAYS);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    check_gl_error("Blend setup");
+    glClearColor(0.5f, 0.0, 0.5f, 1);
 
     GLuint linearFilteringSampler = create_sampler();
 
     GLuint color_texture = create_texture(size, GL_RGBA);
-    GLuint depth_texture = create_texture(size, GL_DEPTH_COMPONENT);
+    GLuint depth_texture = create_texture(size, GL_RED);
     GLuint framebuffer = create_framebuffer(color_texture, depth_texture);
 
     // What the fuck?! Why does this work without a vao on pyopengl?!
@@ -191,7 +185,7 @@ int main(int argc, char* argv[]) {
                     glDeleteTextures(1, &color_texture);
 
                     color_texture = create_texture(size, GL_RGBA);
-                    depth_texture = create_texture(size, GL_DEPTH_COMPONENT);
+                    depth_texture = create_texture(size, GL_RED);
                     framebuffer = create_framebuffer(color_texture, depth_texture);
                 }
             default:
