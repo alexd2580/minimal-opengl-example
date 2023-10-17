@@ -102,6 +102,10 @@ int main(int argc, char* argv[]) {
     glViewport(0, 0, size.w, size.h);
     glClearColor(0.5f, 0.0, 0.5f, 1);
 
+    // BLENDING IS THE ISSUE! i can't just have a single value float out parameter if blending is enabled, because i
+    // can't write the alpha part, and thus the r part gets multiplied by 0. But is i disable alpha i can't do blending
+    // (e.g. for overlays etc!)
+
     GLuint linearFilteringSampler = create_sampler();
 
     GLuint color_texture = create_texture(size, GL_RGBA);
