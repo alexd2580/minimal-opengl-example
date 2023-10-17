@@ -31,7 +31,20 @@ void init_sdl() {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 }
 
-GLuint create_texture(struct Size size) {
+GLuint create_sampler() {
+    GLuint sampler;
+    glCreateSamplers(1, &sampler);
+
+    // These parameters MUST be set (may be set with different values).
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    return sampler;
+}
+
+GLuint create_texture(struct Size size, GLint num_of_components_enum) {
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -40,18 +53,32 @@ GLuint create_texture(struct Size size) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, size.w, size.h, 0, GL_RGBA, GL_FLOAT, NULL);
+
+    // The values we put here (the unsized ones!) are the same for both internalFormat and format.
+    GLenum format_of_data_which_doesnt_exist = (GLenum)num_of_components_enum;
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        num_of_components_enum,
+        size.w,
+        size.h,
+        0,
+        format_of_data_which_doesnt_exist,
+        GL_FLOAT,
+        NULL
+    );
 
     glBindTexture(GL_TEXTURE_2D, 0);
     return texture;
 }
 
-GLuint create_framebuffer(GLuint color_texture) {
+GLuint create_framebuffer(GLuint color_texture, GLuint depth_texture) {
     GLuint framebuffer;
     glGenFramebuffers(1, &framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return framebuffer;
@@ -73,13 +100,19 @@ int main(int argc, char* argv[]) {
     glViewport(0, 0, size.w, size.h);
 
     glClearColor(0.2f, 0, 0.2f, 0);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_ALWAYS);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     check_gl_error("Blend setup");
 
-    GLuint color_texture = create_texture(size);
-    GLuint framebuffer = create_framebuffer(color_texture);
+    GLuint linearFilteringSampler = create_sampler();
+
+    GLuint color_texture = create_texture(size, GL_RGBA);
+    GLuint depth_texture = create_texture(size, GL_DEPTH_COMPONENT);
+    GLuint framebuffer = create_framebuffer(color_texture, depth_texture);
 
     // What the fuck?! Why does this work without a vao on pyopengl?!
     GLuint vao;
@@ -95,10 +128,8 @@ int main(int argc, char* argv[]) {
         try_update_program(shader_a);
         try_update_program(shader_b);
 
-        glClear(GL_COLOR_BUFFER_BIT);
-        check_gl_error("Clear color");
-
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if(program_is_valid(shader_a)) {
             use_program(shader_a);
@@ -109,6 +140,18 @@ int main(int argc, char* argv[]) {
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // For reference see:
+        // https://paroj.github.io/gltut/Texturing/SamplerBindingDiagram.svg
+        // https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)#Binding_points
+
+        glActiveTexture(GL_TEXTURE0 + 0);
+        glBindTexture(GL_TEXTURE_2D, color_texture);
+        glBindSampler(0, linearFilteringSampler);
+        glActiveTexture(GL_TEXTURE0 + 1);
+        glBindTexture(GL_TEXTURE_2D, depth_texture);
+        glBindSampler(1, linearFilteringSampler);
 
         if(program_is_valid(shader_b)) {
             use_program(shader_b);
@@ -117,6 +160,11 @@ int main(int argc, char* argv[]) {
             check_gl_error("Draw arrays 'color'");
             glUseProgram(0);
         }
+
+        glActiveTexture(GL_TEXTURE0 + 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0 + 1);
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         SDL_GL_SwapWindow(window);
 
@@ -142,8 +190,9 @@ int main(int argc, char* argv[]) {
                     glDeleteFramebuffers(1, &framebuffer);
                     glDeleteTextures(1, &color_texture);
 
-                    color_texture = create_texture(size);
-                    framebuffer = create_framebuffer(color_texture);
+                    color_texture = create_texture(size, GL_RGBA);
+                    depth_texture = create_texture(size, GL_DEPTH_COMPONENT);
+                    framebuffer = create_framebuffer(color_texture, depth_texture);
                 }
             default:
                 break;
@@ -153,6 +202,8 @@ int main(int argc, char* argv[]) {
 
     glDeleteFramebuffers(1, &framebuffer);
     glDeleteTextures(1, &color_texture);
+    glDeleteTextures(1, &depth_texture);
+    glDeleteSamplers(1, &linearFilteringSampler);
 
     delete_program(shader_a);
     delete_program(shader_b);

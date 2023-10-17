@@ -4,20 +4,27 @@ ColumnLimit: 120
 Standard: C++11
 IndentWidth: 4
 
-DerivePointerAlignment: 'false'
+DerivePointerAlignment: false
 PointerAlignment: Left
 
 UseTab: Never
 
-Language: Cpp
-MaxEmptyLinesToKeep: '1'
+MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
-SpaceAfterCStyleCast: 'false'
-SpaceBeforeAssignmentOperators: 'true'
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
 SpaceBeforeParens: Never
-SpaceInEmptyParentheses: 'false'
-SpacesInAngles: 'false'
-SpacesInCStyleCastParentheses: 'false'
-SpacesInContainerLiterals: 'false'
-SpacesInParentheses: 'false'
-SpacesInSquareBrackets: 'false'
+SpaceInEmptyParentheses: false
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+AlignAfterOpenBracket: BlockIndent
+
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+
+BinPackParameters: false
+BinPackArguments: false

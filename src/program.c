@@ -18,8 +18,12 @@
 
 GLuint invalid = (GLuint)-1;
 
-void eprint_info_log(void (*get_log)(GLuint, GLsizei, GLsizei*, GLchar*),
-                     void (*get_log_length)(GLuint, GLenum, GLint*), GLuint resource, char const* msg) {
+void eprint_info_log(
+    void (*get_log)(GLuint, GLsizei, GLsizei*, GLchar*),
+    void (*get_log_length)(GLuint, GLenum, GLint*),
+    GLuint resource,
+    char const* msg
+) {
     GLint length;
     (*get_log_length)(resource, GL_INFO_LOG_LENGTH, &length);
     if(length == 0) {
