@@ -1,9 +1,7 @@
 // See https://antongerdelan.net/opengl/compute.html for reference.
 #include <stdbool.h>
 #include <stdio.h>
-#include <time.h> // TODO
 
-#include <sys/stat.h>
 #include <sys/types.h>
 
 #define GL_GLEXT_PROTOTYPES
@@ -12,106 +10,34 @@
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_opengl_glext.h>
 
+#include "error.h"
+#include "file.h"
+#include "globals.h"
+#include "log.h"
 #include "program.h"
 
-struct Program_ {
-    char const* vert_shader_path;
-    time_t vert_shader_mtime;
-    GLuint vert_shader;
-    char const* frag_shader_path;
-    time_t frag_shader_mtime;
-    GLuint frag_shader;
-    GLuint program;
-};
+GLuint invalid = (GLuint)-1;
 
-char* read_file(char const* path, int* size) {
-    FILE* fp = fopen(path, "r");
-    if(fp == NULL) {
-        fprintf(stderr, "Cannot open file %s\n", path);
-        exit(1);
+void eprint_info_log(void (*get_log)(GLuint, GLsizei, GLsizei*, GLchar*),
+                     void (*get_log_length)(GLuint, GLenum, GLint*), GLuint resource, char const* msg) {
+    GLint length;
+    (*get_log_length)(resource, GL_INFO_LOG_LENGTH, &length);
+    if(length == 0) {
+        return;
     }
 
-    if(fseek(fp, 0L, SEEK_END) != 0) {
-        fprintf(stderr, "Failed to fseek\n");
-        exit(1);
-    }
-
-    int bufsize = (int)ftell(fp);
-    if(bufsize == -1) {
-        fprintf(stderr, "Failed to ftell\n");
-        exit(1);
-    }
-
-    if(size != NULL) {
-        *size = bufsize;
-    }
-
-    char* data = malloc(sizeof(char) * (size_t)(bufsize + 1));
-
-    if(fseek(fp, 0L, SEEK_SET) != 0) {
-        fprintf(stderr, "Failed to fseek\n");
-        exit(1);
-    }
-
-    fread(data, sizeof(char), (size_t)bufsize, fp);
-    if(ferror(fp) != 0) {
-        fprintf(stderr, "Failed to fread\n");
-        exit(1);
-    }
-
-    data[bufsize] = '\0';
-    fclose(fp);
-
-    return data;
-}
-
-time_t get_mtime(char const* path) {
-    struct stat attr;
-    stat(path, &attr);
-    return attr.st_mtime;
-}
-
-GLuint compile_shader(GLenum type, char const* source_path) {
-    GLuint shader = glCreateShader(type);
-
-    int source_len;
-    char* source = read_file(source_path, &source_len);
-    char const* const_source = source;
-
-    glShaderSource(shader, 1, (GLchar const**)&const_source, &source_len);
-    glCompileShader(shader);
-
-    free(source);
-
-    GLint status;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
-    if(status == GL_FALSE) {
-        int max_size = 10000;
-        GLchar* log = (GLchar*)malloc((size_t)max_size * sizeof(GLchar));
-        GLsizei length;
-        glGetShaderInfoLog(shader, max_size, &length, log);
-        fprintf(stderr, "%s: shader compilation failed\n%.*s", source_path, length, log);
-        free(log);
-        glDeleteShader(shader);
-        return (GLuint)-1;
-    }
-
-    return shader;
-}
-
-void uninstall_program(Program program) {
-    glDeleteProgram(program->program);
-    glDeleteShader(program->vert_shader);
-    glDeleteShader(program->frag_shader);
-}
-
-void print_program_info_log(GLuint program, char const* msg) {
-    int max_size = 10000;
-    GLchar* log = (GLchar*)malloc((size_t)max_size * sizeof(GLchar));
-    GLsizei length;
-    glGetProgramInfoLog(program, max_size, &length, log);
+    GLchar* log = (GLchar*)malloc((size_t)(length + 1) * sizeof(GLchar));
+    (*get_log)(resource, length + 1, nullptr, log);
     fprintf(stderr, "%s\n%.*s", msg, length, log);
     free(log);
+}
+
+void eprint_shader_info_log(GLuint shader, char const* msg) {
+    eprint_info_log(&glGetShaderInfoLog, &glGetShaderiv, shader, msg);
+}
+
+void eprint_program_info_log(GLuint program, char const* msg) {
+    eprint_info_log(&glGetProgramInfoLog, &glGetProgramiv, program, msg);
 }
 
 GLint get_program_i(GLuint program, GLuint what) {
@@ -120,81 +46,151 @@ GLint get_program_i(GLuint program, GLuint what) {
     return result;
 }
 
-void update_program_if_valid(Program program) {
-    time_t t = time(NULL);
-    struct tm* localized_time = localtime(&t);
-    char s[1000];
-    strftime(s, 1000, "%F %T", localized_time);
-    printf("[%s] Compiling %s and %s...\n", s, program->vert_shader_path, program->frag_shader_path);
+typedef struct Shader_* Shader;
+struct Shader_ {
+    GLenum type;
+    char const* path;
+    time_t mtime;
+    GLuint shader;
+};
 
-    program->vert_shader_mtime = get_mtime(program->vert_shader_path);
-    program->frag_shader_mtime = get_mtime(program->frag_shader_path);
+Shader create_shader(GLenum type, char const* path) {
+    Shader shader = ALLOCATE(1, struct Shader_);
+    shader->type = type;
+    shader->path = path;
+    shader->mtime = 0;
+    shader->shader = invalid;
+    return shader;
+}
 
-    GLuint vert_shader = compile_shader(GL_VERTEX_SHADER, program->vert_shader_path);
-    if(vert_shader == (GLuint)-1) {
-        return;
+bool shader_is_valid(Shader shader) { return shader->shader != invalid; }
+bool shader_was_modified(Shader shader) { return mtime_of(shader->path) > shader->mtime; }
+
+GLuint compile_shader(Shader shader) {
+    info_log("Compiling %s...\n", shader->path);
+    shader->mtime = mtime_of(shader->path);
+
+    GLuint new_shader = glCreateShader(shader->type);
+
+    int source_len;
+    char* source = read_file(shader->path, &source_len);
+    char const* const_source = source;
+
+    glShaderSource(new_shader, 1, (GLchar const**)&const_source, &source_len);
+    glCompileShader(new_shader);
+
+    free(source);
+
+    GLint status;
+    glGetShaderiv(new_shader, GL_COMPILE_STATUS, &status);
+    if(status != GL_TRUE) {
+        eprint_shader_info_log(new_shader, "Shader compilation failed:");
+        glDeleteShader(new_shader);
+        return invalid;
     }
 
-    GLuint frag_shader = compile_shader(GL_FRAGMENT_SHADER, program->frag_shader_path);
-    if(frag_shader == (GLuint)-1) {
-        return;
-    }
+    return new_shader;
+}
 
-    GLuint prgm = glCreateProgram();
-    glAttachShader(prgm, vert_shader);
-    glAttachShader(prgm, frag_shader);
-
-    glLinkProgram(prgm);
-    if(get_program_i(prgm, GL_LINK_STATUS) == GL_FALSE) {
-        print_program_info_log(prgm, "Failed to link program");
-
-        glDeleteProgram(prgm);
-        glDeleteShader(vert_shader);
-        glDeleteShader(frag_shader);
-
-        return;
-    }
-
-    if(program->program != (GLuint)-1) {
-        uninstall_program(program);
-    }
-
-    program->vert_shader = vert_shader;
-    program->frag_shader = frag_shader;
-    program->program = prgm;
-
-    glValidateProgram(program->program);
-    if(get_program_i(program->program, GL_VALIDATE_STATUS) != GL_TRUE) {
-        print_program_info_log(prgm, "Failed to validate program");
+void uninstall_shader(GLuint shader) {
+    if(shader != invalid) {
+        glDeleteShader(shader);
     }
 }
 
-Program create_program(char const* vert_shader_path, char const* frag_shader_path) {
-    Program program = (struct Program_*)malloc(sizeof(struct Program_));
+void delete_shader(Shader shader) {
+    uninstall_shader(shader->shader);
+    free(shader);
+}
 
-    program->vert_shader_path = vert_shader_path;
-    program->vert_shader = (GLuint)-1;
-    program->frag_shader_path = frag_shader_path;
-    program->frag_shader = (GLuint)-1;
-    program->program = (GLuint)-1;
+struct Program_ {
+    Shader vertex;
+    Shader fragment;
+    GLuint program;
+};
 
-    update_program_if_valid(program);
+Program create_program(char const* vertex_shader_path, char const* fragment_shader_path) {
+    Program program = ALLOCATE(1, struct Program_);
+    program->vertex = create_shader(GL_VERTEX_SHADER, vertex_shader_path);
+    program->fragment = create_shader(GL_FRAGMENT_SHADER, fragment_shader_path);
+    program->program = invalid;
+    return program;
+}
+
+bool program_is_valid(Program program) { return program->program != invalid; }
+
+GLuint link_program(GLuint vertex, GLuint fragment) {
+    info_log("Linking shader program...\n");
+    GLuint program = glCreateProgram();
+
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+
+    glLinkProgram(program);
+    if(get_program_i(program, GL_LINK_STATUS) == GL_FALSE) {
+        eprint_program_info_log(program, "Failed to link program");
+        glDeleteProgram(program);
+        return invalid;
+    }
 
     return program;
 }
 
-void update_program_if_modified(Program program) {
-    bool vert_updated = get_mtime(program->vert_shader_path) > program->vert_shader_mtime;
-    bool frag_updated = get_mtime(program->frag_shader_path) > program->frag_shader_mtime;
-
-    if(vert_updated || frag_updated) {
-        update_program_if_valid(program);
+void uninstall_program(GLuint program) {
+    if(program != invalid) {
+        glDeleteProgram(program);
     }
+}
+
+void try_update_program(Program program) {
+    Shader vertex = program->vertex;
+    Shader fragment = program->fragment;
+
+    if(!shader_was_modified(vertex) && !shader_was_modified(fragment)) {
+        return;
+    }
+
+    GLuint new_vertex = compile_shader(vertex);
+    vertex->mtime = mtime_of(vertex->path);
+    GLuint new_fragment = compile_shader(fragment);
+    fragment->mtime = mtime_of(fragment->path);
+
+    if(new_vertex == invalid || new_fragment == invalid) {
+        uninstall_shader(new_vertex);
+        uninstall_shader(new_fragment);
+        return;
+    }
+
+    GLuint new_program = link_program(new_vertex, new_fragment);
+    if(new_program == invalid) {
+        uninstall_shader(new_vertex);
+        uninstall_shader(new_fragment);
+        return;
+    }
+
+    glValidateProgram(new_program);
+    if(get_program_i(new_program, GL_VALIDATE_STATUS) != GL_TRUE) {
+        eprint_program_info_log(new_program, "Failed to validate program");
+        glDeleteProgram(new_program);
+        uninstall_shader(new_vertex);
+        uninstall_shader(new_fragment);
+        return;
+    }
+
+    uninstall_program(program->program);
+    uninstall_shader(vertex->shader);
+    uninstall_shader(fragment->shader);
+
+    program->program = new_program;
+    vertex->shader = new_vertex;
+    fragment->shader = new_fragment;
 }
 
 void use_program(Program program) { glUseProgram(program->program); }
 
 void delete_program(Program program) {
-    uninstall_program(program);
+    uninstall_program(program->program);
+    delete_shader(program->vertex);
+    delete_shader(program->fragment);
     free(program);
 }

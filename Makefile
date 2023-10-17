@@ -9,7 +9,8 @@ WFLAGS  = -Wall -Wextra -pedantic -Wdouble-promotion -Wformat=2 -Winit-self \
           -Wmissing-field-initializers \
           -Wmissing-format-attribute -Wpacked -Winline -Wredundant-decls \
           -Wvector-operation-performance -Wdisabled-optimization \
-          -Wstack-protector
+          -Wstack-protector \
+          -Wno-suggest-attribute=format
 
 #CWFLAGS      = -Wdeclaration-after-statement -Wc++-compat -Wbad-function-cast \
 #               -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -Wunsuffixed-float-constants
@@ -17,7 +18,7 @@ WFLAGS  = -Wall -Wextra -pedantic -Wdouble-promotion -Wformat=2 -Winit-self \
 
 DEBUGFLAGS   = -g3 -O0
 RELEASEFLAGS = -g0 -O3
-CFLAGS       = -std=c17 -lm
+CFLAGS       = -std=c2x -lm
 
 # Includes
 INCLUDE_FLAGS = -Iinclude `sdl2-config --cflags`
@@ -66,3 +67,6 @@ build/release/%.o: %.c Makefile
 
 clean:
 	-@rm -rfv build
+
+compile_commands.json: clean
+	bear -- make debug

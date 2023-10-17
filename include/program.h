@@ -1,9 +1,7 @@
 #ifndef INCLUDE_PROGRAM_H
 #define INCLUDE_PROGRAM_H
 
-#include <SDL2/SDL_opengl.h>
 #include <stdbool.h>
-#include <time.h>
 
 struct Program_;
 typedef struct Program_* Program;
@@ -11,8 +9,11 @@ typedef struct Program_* Program;
 // Initialize and install a program.
 Program create_program(char const* vert_shader_path, char const* frag_shader_path);
 
+// Can i use this program to render stuff.
+bool program_is_valid(Program program);
+
 // Combine the modified check and validity check.
-void update_program_if_modified(Program program);
+void try_update_program(Program program);
 
 // Bind the program.
 void use_program(Program program);

@@ -4,20 +4,13 @@
 
 #define GL_GLEXT_PROTOTYPES
 
+#include <GL/glu.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_opengl.h>
-#include <GL/glu.h>
 
 #include "program.h"
-
-void check_error(char const* loc) {
-    GLenum e;
-    if((e = glGetError()) != GL_NO_ERROR) {
-        printf("%s: OpenGL error \"%s\"\n", loc, gluErrorString(e));
-        exit(1);
-    }
-}
+#include "error.h"
 
 struct Size {
     int w;
@@ -81,7 +74,7 @@ int main(int argc, char* argv[]) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    check_error("Blend setup");
+    check_gl_error("Blend setup");
 
     /* glDisable(GL_DEPTH_TEST); */
     /* // glClearColor(0.0, 0.0, 0.0, 0.0); */
@@ -97,30 +90,31 @@ int main(int argc, char* argv[]) {
     glBindVertexArray(vao);
 
     Program shader_a = create_program("shaders/quad.vert", "shaders/data.frag");
-    check_error("Compile program 'data'");
     Program shader_b = create_program("shaders/quad.vert", "shaders/color.frag");
-    check_error("Compile program 'color'");
 
     while(true) {
-        update_program_if_modified(shader_a);
-        check_error("Update program 'data'");
-        update_program_if_modified(shader_b);
-        check_error("Update program 'color'");
+        try_update_program(shader_a);
+        try_update_program(shader_b);
 
         glClear(GL_COLOR_BUFFER_BIT);
-        check_error("Clear color");
+        check_gl_error("Clear color");
 
-        use_program(shader_a);
-        check_error("Use program 'data'");
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        check_error("Draw arrays 'data'");
-        glUseProgram(0);
+        if (program_is_valid(shader_a)) {
+            use_program(shader_a);
+            check_gl_error("Use program 'data'");
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            check_gl_error("Draw arrays 'data'");
+            glUseProgram(0);
+        }
 
-        use_program(shader_b);
-        check_error("Use program 'color'");
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        check_error("Draw arrays 'color'");
-        glUseProgram(0);
+        if (program_is_valid(shader_b)) {
+            use_program(shader_b);
+            check_gl_error("Use program 'color'");
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+            check_gl_error("Draw arrays 'color'");
+            glUseProgram(0);
+        }
+
 
         SDL_GL_SwapWindow(window);
         if(handle_events(&size)) {
